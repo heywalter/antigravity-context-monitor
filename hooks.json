@@ -1,0 +1,18 @@
+{
+  "context-monitor-tracker": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "./hooks/track_active.sh",
+        "timeout": 3
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "./hooks/track_active.sh",
+        "timeout": 3
+      }
+    ]
+  }
+}

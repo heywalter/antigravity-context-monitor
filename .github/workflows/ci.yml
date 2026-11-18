@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-node:
+    name: Node.js (${{ matrix.node-version }}) Tests, Syntax & Hook Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Check POSIX shell hook syntax
+        run: sh -n hooks/track_active.sh
+
+      - name: Syntax check JavaScript modules
+        working-directory: sidecars/context_monitor
+        run: |
+          node --check main.mjs
+          node --check prefs.mjs
+          node --check titles.mjs
+          node --check ttft.mjs
+          node --check metrics.mjs
+          node --check history.mjs
+          node --check app.js
+
+      - name: Run unit tests
+        working-directory: sidecars/context_monitor
+        run: npm test
+
+  verify-macos-hud:
+    name: macOS Swift HUD Build & Self-Test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile hud_bar.swift and run self-test
+        working-directory: sidecars/context_monitor
+        run: |
+          swiftc -O -o hud_bar_ci hud_bar.swift -framework Cocoa -framework CoreGraphics
+          ./hud_bar_ci --self-test | grep -q "SELF_TEST_OK"
+          rm -f hud_bar_ci

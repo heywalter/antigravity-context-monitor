@@ -1,0 +1,21 @@
+{
+  "name": "context-monitor",
+  "displayName": "Context & Usage",
+  "version": "0.2.0",
+  "description": "Read-only live monitor for conversation context window occupancy (Auto 256K compaction-aware), Prompt Cache hit rate, output speed (tok/s), First Token Latency (TTFT), API cost reference estimates, and cross-session Desktop + CLI token history.",
+  "author": {
+    "name": "Walter",
+    "url": "https://github.com/heywalter"
+  },
+  "homepage": "https://github.com/heywalter/antigravity-context-monitor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heywalter/antigravity-context-monitor.git"
+  },
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "View current session context window usage and cache hit rate",
+    "Check which steps or tool calls expanded the context the most",
+    "Open the Context & Usage sidecar panel"
+  ]
+}

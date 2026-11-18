@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Context &amp; Usage</title>
+  <script src="/preload.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="loading" class="loading" aria-live="polite" aria-busy="true">
+    <div class="skel-card">
+      <span class="skel" style="width: 42%; height: 14px"></span>
+      <span class="skel" style="width: 100%; height: 10px"></span>
+      <span class="skel" style="width: 68%; height: 11px"></span>
+    </div>
+    <div class="skel-grid">
+      <div class="skel-card"><span class="skel" style="width: 55%; height: 10px"></span><span class="skel" style="width: 40%; height: 18px"></span></div>
+      <div class="skel-card"><span class="skel" style="width: 55%; height: 10px"></span><span class="skel" style="width: 40%; height: 18px"></span></div>
+    </div>
+    <p class="loading-caption" data-i18n="loadingCaption">Loading session context &amp; usage…</p>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="header">
+      <div class="header-row">
+        <div class="title-group">
+          <h1 class="title">Context &amp; Usage</h1>
+          <span id="status-pill" class="status-pill hidden"></span>
+        </div>
+        <div class="header-right">
+          <button id="lang-toggle" type="button" class="mini-btn" title="Switch language (EN / 中文)">中文</button>
+          <span id="live" class="live" role="status" title="Auto-refreshes every 1.5s" data-i18n-title="liveTitle">
+            <span class="live-dot" aria-hidden="true"></span><span id="live-label">Live</span>
+          </span>
+        </div>
+      </div>
+      <div class="meta-row">
+        <span id="conv-label" class="conv-label"></span>
+        <label class="window-picker" title="Antigravity context / auto-compaction limit for percentage gauge" data-i18n-title="windowTitle">
+          <span class="muted" data-i18n="windowLabel">Window</span>
+          <select id="window-limit" aria-label="Context window limit">
+            <option value="0" selected>Auto (256K)</option>
+            <option value="128000">128K</option>
+            <option value="200000">200K</option>
+            <option value="256000">256K</option>
+            <option value="512000">512K</option>
+            <option value="1000000">1M</option>
+            <option value="2000000">2M</option>
+          </select>
+        </label>
+      </div>
+      <div id="ds-strip" class="ds-strip" aria-label="Session telemetry strip">
+        <span class="ds-item" title="User turns, total steps, and end-to-end Avg / Last output speed" data-i18n-title="stripSpeedTitle">
+          <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5a6 6 0 1 1 11 0"/><path d="M8 8.5l2.5-2.5"/><circle cx="8" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
+          <span id="ds-turns-speed">0 turns 0 steps</span>
+        </span>
+        <span id="ds-ttft-wrap" class="ds-item hidden" title="Average and latest Time To First Token (TTFT)" data-i18n-title="stripTtftTitle">
+          <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5"/><path d="M8 5.2v3.3l2.2 1.3"/><path d="M6.5 1.8h3"/></svg>
+          <span id="ds-ttft">TTFT —</span>
+        </span>
+        <span class="ds-item" title="Total tokens processed and Prompt Cache hit rate" data-i18n-title="stripCacheTitle">
+          <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4.2" rx="4.8" ry="1.8"/><path d="M3.2 4.2v3.6c0 1 2.15 1.8 4.8 1.8s4.8-.8 4.8-1.8V4.2"/><path d="M3.2 7.8v3.6c0 1 2.15 1.8 4.8 1.8s4.8-.8 4.8-1.8V7.8"/></svg>
+          <span id="ds-tokens-cache">0 tok · Cache hit 0.0%</span>
+        </span>
+        <span class="ds-item ds-ctx" title="Current context window occupancy" data-i18n-title="stripCtxTitle">
+          <svg class="ds-ring" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <circle class="ds-ring-bg" cx="7" cy="7" r="5.2"/>
+            <circle id="ds-ring-fg" class="ds-ring-fg" cx="7" cy="7" r="5.2" stroke-dasharray="32.67" stroke-dashoffset="32.67"/>
+          </svg>
+          <span id="ds-ctx-pct">0%</span>
+        </span>
+      </div>
+      <div id="hud-controls" class="hud-bar-controls">
+        <div class="hud-ctrl-group">
+          <label class="hud-ctrl-label" title="Floating capsule anchor position" data-i18n-title="hudAnchorTitle">
+            <span data-i18n="hudAnchorLabel">Position</span>
+            <select id="hud-anchor" aria-label="HUD anchor position">
+              <option value="topRight" data-i18n="optAnchorTopRight">Top Right</option>
+              <option value="bottomCenter" data-i18n="optAnchorBottomCenter">Bottom Center</option>
+              <option value="bottomRight" data-i18n="optAnchorBottomRight">Bottom Right</option>
+            </select>
+          </label>
+          <label class="hud-ctrl-label" title="Floating capsule density" data-i18n-title="hudStyleTitle">
+            <span data-i18n="hudStyleLabel">Style</span>
+            <select id="hud-style" aria-label="HUD capsule style">
+              <option value="compact" data-i18n="optStyleCompact">Compact</option>
+              <option value="full" data-i18n="optStyleFull">Full Bar</option>
+              <option value="minimal" data-i18n="optStyleMinimal">Minimal</option>
+            </select>
+          </label>
+          <label class="hud-ctrl-label" title="Where to display the HUD monitor" data-i18n-title="hudModeTitle">
+            <span data-i18n="hudModeLabel">Display</span>
+            <select id="hud-mode" aria-label="HUD display mode">
+              <option value="both" data-i18n="optModeBoth">Window + Menu</option>
+              <option value="window" data-i18n="optModeWindow">Window Only</option>
+              <option value="menubar" data-i18n="optModeMenubar">Menu Bar Only</option>
+            </select>
+          </label>
+        </div>
+        <button id="hud-reset" type="button" class="mini-btn" title="Restore and snap capsule back to default anchor" data-i18n="hudReset" data-i18n-title="hudResetTitle">Reset</button>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Views">
+        <button type="button" role="tab" id="tabbtn-overview" data-tab="overview" aria-selected="true" class="tab active" data-i18n="tabOverview">Overview</button>
+        <button type="button" role="tab" id="tabbtn-history" data-tab="history" aria-selected="false" tabindex="-1" class="tab" data-i18n="tabHistory">History</button>
+        <button type="button" role="tab" id="tabbtn-timeline" data-tab="timeline" aria-selected="false" tabindex="-1" class="tab"><span data-i18n="tabSteps">Steps</span><span id="count-timeline" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tabbtn-tools" data-tab="tools" aria-selected="false" tabindex="-1" class="tab"><span data-i18n="tabTools">Tools</span><span id="count-tools" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tabbtn-raw" data-tab="raw" aria-selected="false" tabindex="-1" class="tab" data-i18n="tabRaw">Raw</button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <!-- Overview -->
+      <section id="tab-overview" class="tab-body active" role="tabpanel" aria-labelledby="tabbtn-overview">
+        <div class="card gauge-card">
+          <div class="card-head">
+            <div>
+              <div class="eyebrow" data-i18n="ctxEyebrow">Current Context Window</div>
+              <div class="gauge-headline">
+                <span id="ctx-used" class="metric-lg">0</span>
+                <span class="metric-sep">/</span>
+                <span id="ctx-limit" class="metric-sub">1.00M</span>
+                <span id="ctx-pct" class="pct-badge">0%</span>
+              </div>
+            </div>
+            <div class="gauge-right">
+              <div id="ctx-free" class="muted-sm"></div>
+              <div id="ctx-next" class="muted-2xs"></div>
+            </div>
+          </div>
+
+          <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ctx-meter">
+            <div id="seg-base" class="meter-seg seg-base" style="width: 0%"></div>
+            <div id="seg-growth" class="meter-seg seg-growth" style="width: 0%"></div>
+            <div id="seg-out" class="meter-seg seg-out" style="width: 0%"></div>
+          </div>
+
+          <div class="legend">
+            <span class="legend-item" title="Prompt tokens of the 1st model call (system prompt, rules, skills, tools, initial message)" data-i18n-title="legBaseTitle">
+              <span class="dot dot-base"></span><span data-i18n="legBase">Base</span> <strong id="leg-base">0</strong>
+            </span>
+            <span class="legend-item" title="Context accumulated over turns and tool outputs" data-i18n-title="legGrowthTitle">
+              <span class="dot dot-growth"></span><span data-i18n="legGrowth">Growth</span> <strong id="leg-growth">0</strong>
+            </span>
+            <span class="legend-item" title="Most recent model output tokens" data-i18n-title="legOutTitle">
+              <span class="dot dot-out"></span><span data-i18n="legOut">Last Out</span> <strong id="leg-out">0</strong>
+            </span>
+          </div>
+
+          <div id="compact-alert" class="alert hidden" data-i18n-html="compactAlert">
+            Context occupancy is high. Consider running <code>/compact</code> at a task boundary to preserve cache efficiency.
+          </div>
+
+          <div class="spark-wrap">
+            <div class="spark-head">
+              <span data-i18n="sparkTitle">Context Growth Trajectory</span>
+              <span id="spark-meta" class="muted-2xs"></span>
+            </div>
+            <svg id="sparkline" class="sparkline" viewBox="0 0 320 68" preserveAspectRatio="none" role="img" aria-label="Context token growth chart"></svg>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statTotalLabel">Total Tokens (All Steps)</div>
+            <div id="stat-total" class="stat-val">0</div>
+            <div id="stat-total-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statCacheLabel">Prompt Cache Hit Rate</div>
+            <div id="stat-cache" class="stat-val">0%</div>
+            <div id="stat-cache-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statSpeedLabel">Output Speed (Avg / Last)</div>
+            <div id="stat-speed" class="stat-val">—</div>
+            <div id="stat-speed-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statCostLabel">Est. API Cost</div>
+            <div id="stat-cost" class="stat-val">$0.00</div>
+            <div id="stat-cost-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card stat-card-wide">
+            <div class="stat-wide-head">
+              <div class="eyebrow" data-i18n="statTtftLabel">First Token Latency (TTFT · Avg / Last)</div>
+              <div id="stat-ttft-count" class="muted-2xs"></div>
+            </div>
+            <div class="stat-wide-body">
+              <div id="stat-ttft" class="stat-val">—</div>
+              <div id="stat-ttft-sub" class="stat-sub"></div>
+            </div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statIoLabel">Uncached Input / Output</div>
+            <div id="stat-io" class="stat-val">0 / 0</div>
+            <div id="stat-io-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="statActivityLabel">Session Activity</div>
+            <div id="stat-activity" class="stat-val">0 turns</div>
+            <div id="stat-activity-sub" class="stat-sub"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head tight">
+            <span class="section-title" data-i18n="turnsHeading">Consumption By Turn</span>
+            <span id="turns-count" class="muted-2xs"></span>
+          </div>
+          <div id="turns-list" class="turns-list"></div>
+        </div>
+      </section>
+
+      <!-- History / Global Dashboard -->
+      <section id="tab-history" class="tab-body" role="tabpanel" aria-labelledby="tabbtn-history">
+        <div class="toolbar">
+          <div id="hist-source-tabs" class="seg-pills" role="group" aria-label="History source filter">
+            <button type="button" class="seg-pill active" data-source="all" data-i18n="srcAll">All (Desktop+CLI)</button>
+            <button type="button" class="seg-pill" data-source="desktop">Desktop</button>
+            <button type="button" class="seg-pill" data-source="cli">CLI</button>
+          </div>
+          <button id="hist-refresh" type="button" class="ghost-btn" data-i18n="refreshBtn">Refresh</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="card stat-card">
+            <div class="eyebrow" id="hist-today-label">Today</div>
+            <div id="hist-today-val" class="stat-val">0</div>
+            <div id="hist-today-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="hist7dLabel">Last 7 Days</div>
+            <div id="hist-7d-val" class="stat-val">0</div>
+            <div id="hist-7d-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="histMonthLabel">This Month</div>
+            <div id="hist-month-val" class="stat-val">0</div>
+            <div id="hist-month-sub" class="stat-sub"></div>
+          </div>
+          <div class="card stat-card">
+            <div class="eyebrow" data-i18n="histAllLabel">All Time &amp; Cache Savings</div>
+            <div id="hist-all-val" class="stat-val">0</div>
+            <div id="hist-all-sub" class="stat-sub"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head tight">
+            <span class="section-title" data-i18n="heatmapTitle">12-Week Activity Heatmap</span>
+            <div class="hm-legend" aria-hidden="true">
+              <span data-i18n="heatLess">Less</span>
+              <span class="hm-cell" data-level="0"></span>
+              <span class="hm-cell" data-level="1"></span>
+              <span class="hm-cell" data-level="2"></span>
+              <span class="hm-cell" data-level="3"></span>
+              <span class="hm-cell" data-level="4"></span>
+              <span data-i18n="heatMore">More</span>
+            </div>
+          </div>
+          <div class="hm-wrap">
+            <div id="hm-weekdays" class="hm-weekdays" aria-hidden="true">
+              <span>M</span><span></span><span>W</span><span></span><span>F</span><span></span><span>S</span>
+            </div>
+            <div id="hist-heatmap" class="hm-grid" role="grid" aria-label="12-week token activity heatmap"></div>
+          </div>
+          <div id="hist-source-meta" class="muted-2xs" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head tight">
+            <span class="section-title" data-i18n="recentDaysTitle">Recent Daily Usage &amp; Est. Cost</span>
+            <span class="muted-2xs">Input $2 / Cache $0.2 / Out $10 per 1M</span>
+          </div>
+          <div id="hist-days-list" class="hist-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head tight">
+            <span class="section-title" data-i18n="topSessionsTitle">Top 12 Sessions by Tokens</span>
+            <span id="hist-sessions-count" class="muted-2xs"></span>
+          </div>
+          <div id="hist-sessions-list" class="hist-list"></div>
+        </div>
+      </section>
+
+      <!-- Steps / Timeline -->
+      <section id="tab-timeline" class="tab-body" role="tabpanel" aria-labelledby="tabbtn-timeline">
+        <div class="toolbar">
+          <input id="step-search" type="search" class="search-input" placeholder="Filter tool name or step…" aria-label="Filter steps">
+          <button id="step-order" type="button" class="ghost-btn">Newest First</button>
+        </div>
+        <div id="timeline-list" class="timeline-list"></div>
+      </section>
+
+      <!-- Tools -->
+      <section id="tab-tools" class="tab-body" role="tabpanel" aria-labelledby="tabbtn-tools">
+        <div class="note-banner" data-i18n="toolsBanner">
+          Estimated tool overhead: distributes the prompt token delta from each tool batch evenly across the tools invoked in that batch.
+        </div>
+        <div id="tools-list" class="tools-list"></div>
+      </section>
+
+      <!-- Raw -->
+      <section id="tab-raw" class="tab-body" role="tabpanel" aria-labelledby="tabbtn-raw">
+        <div class="toolbar">
+          <span id="raw-meta" class="muted-sm"></span>
+          <button id="raw-copy" type="button" class="ghost-btn" data-i18n="copyJson">Copy JSON</button>
+        </div>
+        <pre id="raw-pre" class="raw-pre" tabindex="0"></pre>
+      </section>
+    </main>
+  </div>
+
+  <section id="empty" class="empty hidden">
+    <div class="empty-card">
+      <div class="empty-icon" aria-hidden="true">◔</div>
+      <h2 id="empty-title" class="empty-title" data-i18n="emptyTitle">Waiting for Transcript</h2>
+      <p id="empty-body" class="empty-body" data-i18n="emptyBody">Send your first message to inspect live context occupancy, cache hit rate, and step usage.</p>
+      <p class="empty-hint"><span class="live-dot" aria-hidden="true"></span><span data-i18n="emptyHint">Watching active session</span></p>
+    </div>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

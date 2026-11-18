@@ -1,0 +1,21 @@
+{
+  "command": "node",
+  "args": ["main.mjs"],
+  "restart_policy": "always",
+  "display_name": "Context & Usage",
+  "description": "Read-only live monitor for context window occupancy, Prompt Cache hit rate, output speed, First Token Latency (TTFT), and Desktop + CLI token history.",
+  "has_web_ui": true,
+  "agent_permissions": {
+    "allows_user_interactions": false
+  },
+  "ui_config": {
+    "display_name": "Context & Usage",
+    "views": [
+      {
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
+        "title": "Context & Usage"
+      }
+    ]
+  }
+}

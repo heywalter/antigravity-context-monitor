@@ -1,0 +1,10 @@
+# Compiled native HUD binaries & build artifacts
+sidecars/context_monitor/hud_bar
+sidecars/context_monitor/*.tmp
+dist/
+bin/
+
+# Node & OS files
+node_modules/
+.DS_Store
+*.log
