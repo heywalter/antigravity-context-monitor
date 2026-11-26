@@ -4,6 +4,15 @@ All notable changes to **`antigravity-context-monitor`** are documented in this 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-25
+
+### Fixed
+- **Eliminated `events/` Disk Bloat (`0 B` sidecar events)**: Removed background `agentapi get-conversation-metadata` CLI fallback polling from `main.mjs`. In `v0.2.0`, polling untitled/subagent conversations every 15s caused Antigravity's `agentapi` runner to log full `conversationMetadata` JSON payloads (up to ~200 KB per subagent call) into `<sidecar_data>/events/`, growing to gigabytes over days. Title resolution now runs 100% locally via `annotations/*.pbtxt`, read-only `conversation_summaries.db`, and `transcript.jsonl` previews with zero subprocess spawns.
+  - *Upgrading from `v0.2.0`*: You can safely delete legacy event logs with `rm -rf ~/.gemini/antigravity/sidecar_data/context-monitor/context_monitor/events`.
+- **Subagent Active-Session Protection (`titles.mjs`, `main.mjs`)**: Reads `parent_conversation_id` and `nesting_depth` from `conversation_summaries.db` so background `browser` / `research` subagents no longer hijack the HUD from the active user conversation or clutter the recent-session picker (global history totals still include all Desktop + CLI transcripts).
+- **SQLite Read-Only Robustness (`titles.mjs`)**: Added `{ readOnly: true, timeout: 1000 }` and switched fallback SQL to standard single-quoted `WHERE title != ''`, while preserving cached entries on transient lock errors.
+- **Idle Repaint & Cache Eviction Hardening (`hud_bar.swift`, `main.mjs`, `history.mjs`, `titles.mjs`)**: Avoided redundant 4 Hz `layoutCapsuleSubviews()` / `needsDisplay` redraws in `hud_bar.swift` when window bounds and metrics are unchanged, and replaced full-map `.clear()` calls with incremental FIFO eviction.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added / Changed

@@ -73,19 +73,21 @@ try {
  * Resolves the latest human/auto-generated conversation title from local Antigravity
  * annotation files (`<appData>/annotations/<conv>.pbtxt`), falling back to read-only
  * `conversation_summaries.db` lookup if present, and invalidating immediately on change.
+ * Also exposes read-only subagent parent relationships from `conversation_summaries.db`.
  */
 export class ConversationTitleResolver {
-  constructor({ idPattern, fetchFallback, cacheTtlMs = 15_000 } = {}) {
+  constructor({ idPattern, fetchFallback = null, cacheTtlMs = 60_000, emptyCacheTtlMs = 10 * 60_000 } = {}) {
     this.idPattern = idPattern;
     this.fetchFallback = fetchFallback;
     this.cacheTtlMs = cacheTtlMs;
+    this.emptyCacheTtlMs = emptyCacheTtlMs;
     this.annCache = new Map(); // conv -> { path, statKey, title }
-    this.dbCache = new Map();  // dbPath -> { dbKey, titles: Map<conv, title>, atMs }
+    this.dbCache = new Map();  // dbPath -> { dbKey, titles: Map, parents: Map, subagents: Set, atMs }
     this.apiCache = new Map(); // conv -> { title, atMs, pending }
   }
 
   readFromAnnotations(appDataDirs, conv) {
-    for (const appData of appDataDirs) {
+    for (const appData of appDataDirs || []) {
       const p = join(appData, 'annotations', `${conv}.pbtxt`);
       const statKey = safeStatKey(p);
       if (!statKey) continue;
@@ -95,7 +97,10 @@ export class ConversationTitleResolver {
       }
       try {
         const title = parseAnnotationTitle(readFileSync(p, 'utf-8'));
-        if (this.annCache.size > 400) this.annCache.clear();
+        if (this.annCache.size >= 400 && !this.annCache.has(conv)) {
+          const oldest = this.annCache.keys().next().value;
+          if (oldest !== undefined) this.annCache.delete(oldest);
+        }
         this.annCache.set(conv, { path: p, statKey, title });
         return title;
       } catch {
@@ -105,37 +110,92 @@ export class ConversationTitleResolver {
     return '';
   }
 
+  loadSummaryDbCache(dbPath) {
+    if (!DatabaseSyncClass || !existsSync(dbPath)) return null;
+    const mainKey = safeStatKey(dbPath) || '0';
+    const walKey = safeStatKey(`${dbPath}-wal`) || '0';
+    const dbKey = `${mainKey}|${walKey}`;
+    const hit = this.dbCache.get(dbPath);
+    if (hit && hit.dbKey === dbKey) {
+      return hit;
+    }
+
+    let db = null;
+    try {
+      db = new DatabaseSyncClass(dbPath, { readOnly: true, timeout: 1000 });
+      const titles = new Map();
+      const parents = new Map();
+      const subagents = new Set();
+
+      let rows;
+      try {
+        rows = db
+          .prepare('SELECT conversation_id, title, parent_conversation_id, nesting_depth FROM conversation_summaries')
+          .all();
+      } catch {
+        rows = db
+          .prepare("SELECT conversation_id, title FROM conversation_summaries WHERE title != ''")
+          .all();
+      }
+
+      for (const r of rows) {
+        if (!r || typeof r.conversation_id !== 'string') continue;
+        const id = r.conversation_id.trim();
+        if (!id) continue;
+        if (typeof r.title === 'string') {
+          const cleanTitle = r.title.replace(/\s+/g, ' ').trim();
+          if (cleanTitle) titles.set(id, cleanTitle);
+        }
+        const parentId = typeof r.parent_conversation_id === 'string' ? r.parent_conversation_id.trim() : '';
+        const depth = Number(r.nesting_depth) || 0;
+        if (parentId && (!this.idPattern || this.idPattern.test(parentId))) {
+          parents.set(id, parentId);
+          subagents.add(id);
+        } else if (depth > 0) {
+          subagents.add(id);
+        }
+      }
+
+      const entry = { dbKey, titles, parents, subagents, atMs: Date.now() };
+      if (this.dbCache.size >= 8 && !this.dbCache.has(dbPath)) {
+        const oldest = this.dbCache.keys().next().value;
+        if (oldest !== undefined) this.dbCache.delete(oldest);
+      }
+      this.dbCache.set(dbPath, entry);
+      return entry;
+    } catch {
+      // Ignore transient SQLite lock or schema difference; keep last good cache if any.
+      return hit || null;
+    } finally {
+      try { db?.close(); } catch {}
+    }
+  }
+
   readFromSummaryDb(appDataDirs, conv) {
     if (!DatabaseSyncClass) return '';
-    for (const appData of appDataDirs) {
-      const dbPath = join(appData, 'conversation_summaries.db');
-      if (!existsSync(dbPath)) continue;
-      const mainKey = safeStatKey(dbPath) || '0';
-      const walKey = safeStatKey(`${dbPath}-wal`) || '0';
-      const dbKey = `${mainKey}|${walKey}`;
-      const hit = this.dbCache.get(dbPath);
-      if (hit && hit.dbKey === dbKey) {
-        return hit.titles.get(conv) || '';
-      }
-      let db = null;
-      try {
-        db = new DatabaseSyncClass(dbPath, { readOnly: true });
-        const rows = db.prepare('SELECT conversation_id, title FROM conversation_summaries WHERE title != ""').all();
-        const titles = new Map();
-        for (const r of rows) {
-          if (r && typeof r.conversation_id === 'string' && typeof r.title === 'string') {
-            titles.set(r.conversation_id, r.title.replace(/\s+/g, ' ').trim());
-          }
-        }
-        if (this.dbCache.size > 8) this.dbCache.clear();
-        this.dbCache.set(dbPath, { dbKey, titles, atMs: Date.now() });
-        const found = titles.get(conv) || '';
-        if (found) return found;
-      } catch {
-        // Ignore transient SQLite lock or schema difference.
-      } finally {
-        try { db?.close(); } catch {}
-      }
+    for (const appData of appDataDirs || []) {
+      const entry = this.loadSummaryDbCache(join(appData, 'conversation_summaries.db'));
+      const found = entry?.titles.get(conv) || '';
+      if (found) return found;
+    }
+    return '';
+  }
+
+  isSubagent(conv, appDataDirs) {
+    if (!conv || (this.idPattern && !this.idPattern.test(conv))) return false;
+    for (const appData of appDataDirs || []) {
+      const entry = this.loadSummaryDbCache(join(appData, 'conversation_summaries.db'));
+      if (entry?.subagents.has(conv)) return true;
+    }
+    return false;
+  }
+
+  parentOf(conv, appDataDirs) {
+    if (!conv || (this.idPattern && !this.idPattern.test(conv))) return '';
+    for (const appData of appDataDirs || []) {
+      const entry = this.loadSummaryDbCache(join(appData, 'conversation_summaries.db'));
+      const parent = entry?.parents.get(conv) || '';
+      if (parent) return parent;
     }
     return '';
   }
@@ -156,9 +216,13 @@ export class ConversationTitleResolver {
     if (cached && cached.pending) {
       return cached.title || '';
     }
-    if (!cached || now - cached.atMs >= this.cacheTtlMs) {
+    const ttl = cached && !cached.title ? this.emptyCacheTtlMs : this.cacheTtlMs;
+    if (!cached || now - cached.atMs >= ttl) {
       const entry = { title: cached?.title || '', atMs: now, pending: true };
-      if (this.apiCache.size > 300) this.apiCache.clear();
+      if (this.apiCache.size >= 300 && !this.apiCache.has(conv)) {
+        const oldest = this.apiCache.keys().next().value;
+        if (oldest !== undefined) this.apiCache.delete(oldest);
+      }
       this.apiCache.set(conv, entry);
       Promise.resolve(this.fetchFallback(conv))
         .then((title) => {

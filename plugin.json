@@ -1,7 +1,7 @@
 {
   "name": "context-monitor",
   "displayName": "Context & Usage",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only live monitor for conversation context window occupancy (Auto 256K compaction-aware), Prompt Cache hit rate, output speed (tok/s), First Token Latency (TTFT), API cost reference estimates, and cross-session Desktop + CLI token history.",
   "author": {
     "name": "Walter",

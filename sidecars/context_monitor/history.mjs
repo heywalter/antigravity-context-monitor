@@ -298,8 +298,9 @@ export function getGlobalHistory({
           source: root.source,
           mtimeMs: st.mtimeMs,
         });
-        if (fileParseCache.size > 1500) {
-          fileParseCache.clear();
+        if (fileParseCache.size >= 1500 && !fileParseCache.has(transcriptPath)) {
+          const oldest = fileParseCache.keys().next().value;
+          if (oldest !== undefined) fileParseCache.delete(oldest);
         }
         fileParseCache.set(transcriptPath, { sig, parsed });
       }

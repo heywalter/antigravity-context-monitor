@@ -90,34 +90,29 @@ function findTranscriptPath(conv) {
   return null;
 }
 
-function fetchTitle(conv) {
-  const exe = process.env.ANTIGRAVITY_AGENTAPI_EXE;
-  const file = exe || 'agentapi';
-  const args = [...(exe ? ['agentapi'] : []), 'get-conversation-metadata', conv];
-  return new Promise((resolve) => {
-    execFile(file, args, { encoding: 'utf-8', timeout: 3000 }, (err, stdout) => {
-      if (err) return resolve('');
-      try {
-        const md = JSON.parse(stdout || '{}');
-        const meta = md?.response?.conversationMetadata?.metadata || md?.response?.conversation_metadata?.metadata;
-        resolve(meta?.title || md.title || md.summary || md.name || md.metadata?.title || md.conversation?.title || '');
-      } catch {
-        resolve('');
-      }
-    });
-  });
-}
-
+// Pure local read-only title resolution via annotations/*.pbtxt and conversation_summaries.db.
+// Avoids invoking `agentapi` during polling so Antigravity does not accumulate event JSON logs
+// under `<sidecar_data>/events/`.
 const titleResolver = new ConversationTitleResolver({
   idPattern: ID_RE,
-  fetchFallback: fetchTitle,
-  cacheTtlMs: 15_000,
 });
 
 const timingReader = new ConversationTimingReader({ idPattern: ID_RE });
 
 function convTitle(conv) {
   return titleResolver.resolve(conv, findAppDataDirs());
+}
+
+function resolveRootConversationId(conv, appDataDirs) {
+  let current = conv;
+  const seen = new Set();
+  for (let depth = 0; depth < 6 && current && !seen.has(current); depth += 1) {
+    seen.add(current);
+    const parent = titleResolver.parentOf(current, appDataDirs);
+    if (!parent) break;
+    current = parent;
+  }
+  return current;
 }
 
 const metricsCache = new Map(); // transcriptPath -> { etagKey, metrics }
@@ -165,7 +160,10 @@ function readConversationMetrics(conv, { includeTiming = false } = {}) {
       return { found: true, hasTranscript: false, etag: `${conv}|unreadable`, title, metrics: null };
     }
     baseMetrics = parseTranscriptMetrics(raw, { mtimeMs: st.mtime });
-    if (metricsCache.size > 100) metricsCache.clear();
+    if (metricsCache.size >= 100 && !metricsCache.has(transcriptPath)) {
+      const oldest = metricsCache.keys().next().value;
+      if (oldest !== undefined) metricsCache.delete(oldest);
+    }
     metricsCache.set(transcriptPath, { etagKey: `${st.mtime}:${st.size}`, metrics: baseMetrics });
   }
 
@@ -215,7 +213,10 @@ function readActiveHook() {
     const convId = typeof parsed?.conversationId === 'string' ? parsed.conversationId.trim() : '';
     const modelName = typeof parsed?.modelName === 'string' ? parsed.modelName.trim() : '';
     if (ID_RE.test(convId) && modelName) {
-      if (modelByConv.size > 200) modelByConv.clear();
+      if (modelByConv.size >= 200 && !modelByConv.has(convId)) {
+        const oldest = modelByConv.keys().next().value;
+        if (oldest !== undefined) modelByConv.delete(oldest);
+      }
       modelByConv.set(convId, modelName);
     }
     const val = ID_RE.test(convId)
@@ -237,8 +238,9 @@ function scanRecentConversations() {
   if (now - recentCache.atMs < 1500) {
     return recentCache.list;
   }
+  const appDataDirs = findAppDataDirs();
   const byId = new Map();
-  for (const appData of findAppDataDirs()) {
+  for (const appData of appDataDirs) {
     const brainDir = join(appData, 'brain');
     for (const name of safeReaddir(brainDir)) {
       if (!ID_RE.test(name)) continue;
@@ -251,9 +253,9 @@ function scanRecentConversations() {
       }
     }
   }
-  const list = [...byId.values()]
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(0, 10);
+  const allSorted = [...byId.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const topLevel = allSorted.filter((item) => !titleResolver.isSubagent(item.conversationId, appDataDirs));
+  const list = (topLevel.length > 0 ? topLevel : allSorted).slice(0, 10);
   recentCache = { atMs: now, list };
   return list;
 }
@@ -261,6 +263,7 @@ function scanRecentConversations() {
 const lastAuxViewed = { conversationId: '', atMs: 0 };
 
 function resolveActiveConversation() {
+  const appDataDirs = findAppDataDirs();
   const hookInfo = readActiveHook();
   const recent = scanRecentConversations();
   const candidates = [];
@@ -268,7 +271,14 @@ function resolveActiveConversation() {
     candidates.push({ id: recent[0].conversationId, ts: recent[0].mtimeMs });
   }
   if (hookInfo?.conversationId) {
-    candidates.push({ id: hookInfo.conversationId, ts: hookInfo.hookMtimeMs });
+    const hookTarget = titleResolver.isSubagent(hookInfo.conversationId, appDataDirs)
+      ? resolveRootConversationId(hookInfo.conversationId, appDataDirs)
+      : hookInfo.conversationId;
+    if (hookTarget && findTranscriptPath(hookTarget)) {
+      candidates.push({ id: hookTarget, ts: hookInfo.hookMtimeMs });
+    } else {
+      candidates.push({ id: hookInfo.conversationId, ts: hookInfo.hookMtimeMs });
+    }
   }
   if (lastAuxViewed.conversationId && ID_RE.test(lastAuxViewed.conversationId)) {
     candidates.push({ id: lastAuxViewed.conversationId, ts: lastAuxViewed.atMs });
@@ -431,7 +441,11 @@ app.api('/api/hud', (data) => {
     };
   });
 
-  const hist = readEnrichedHistory({ source: 'all', force: false });
+  const hist = getGlobalHistory({
+    antigravityDataDir: findAppDataDirs()[0],
+    sourceFilter: 'all',
+    force: false,
+  });
   const prefs = readHudPrefs();
   const windowLimitInfo = resolveEffectiveWindowLimit({ prefs, modelName, metrics: snap.metrics });
   const recentSig = recentSessions.map((r) => `${r.conversationId}:${r.stepsCount}:${r.title}`).join(';');

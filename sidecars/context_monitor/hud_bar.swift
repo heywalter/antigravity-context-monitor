@@ -1491,6 +1491,8 @@ final class HudController: NSObject, NSMenuDelegate, NSPopoverDelegate {
   private var dragStartMouse: NSPoint = .zero
   private var dragStartOffset: NSPoint = .zero
   private var lastWindowWidth: CGFloat = 1280
+  private var cachedNaturalCapsuleWidth: CGFloat = 210
+  private var capsuleNeedsRelayout = true
 
   private let panel: FloatingHudPanel
   private let capsuleView: CapsuleVisualEffectView
@@ -2013,8 +2015,12 @@ final class HudController: NSObject, NSMenuDelegate, NSPopoverDelegate {
       lastWindowWidth = winRect.width
     }
 
-    let naturalW = layoutCapsuleSubviews()
-    let barW = min(naturalW, max(120.0, winRect.width - 24.0))
+    let didRelayout = capsuleNeedsRelayout
+    if capsuleNeedsRelayout {
+      cachedNaturalCapsuleWidth = layoutCapsuleSubviews()
+      capsuleNeedsRelayout = false
+    }
+    let barW = min(cachedNaturalCapsuleWidth, max(120.0, winRect.width - 24.0))
     let barH: CGFloat = 24.0
 
     let basePt = HudFormatter.anchorBasePoint(
@@ -2032,11 +2038,14 @@ final class HudController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     let clampedY = min(maxY, max(safeBounds.minY, rawY))
 
     let targetFrame = NSRect(x: round(clampedX), y: round(clampedY), width: barW, height: barH)
-    if panel.frame != targetFrame {
+    let frameChanged = panel.frame != targetFrame
+    if frameChanged {
       panel.setFrame(targetFrame, display: true)
     }
-    capsuleView.frame = NSRect(x: 0, y: 0, width: barW, height: barH)
-    capsuleView.needsDisplay = true
+    if frameChanged || didRelayout || capsuleView.frame.size != NSSize(width: barW, height: barH) {
+      capsuleView.frame = NSRect(x: 0, y: 0, width: barW, height: barH)
+      capsuleView.needsDisplay = true
+    }
     if !panel.isVisible {
       panel.orderFrontRegardless()
     }
@@ -2164,7 +2173,8 @@ final class HudController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         "Waiting for active session telemetry · Click for details",
         "等待当前会话数据 · 点击展开详情"
       )
-      _ = layoutCapsuleSubviews()
+      cachedNaturalCapsuleWidth = layoutCapsuleSubviews()
+      capsuleNeedsRelayout = true
       return
     }
 
@@ -2246,7 +2256,8 @@ final class HudController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     }
     tipParts.append(prefs.t("Click for details · Right-click for quick settings", "左键展开详情 · 右键快速设置"))
     capsuleView.toolTip = tipParts.joined(separator: "\n")
-    _ = layoutCapsuleSubviews()
+    cachedNaturalCapsuleWidth = layoutCapsuleSubviews()
+    capsuleNeedsRelayout = true
   }
 
   private func renderMetrics() {

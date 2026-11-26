@@ -591,3 +591,69 @@ test('ConversationTimingReader reads steps TTFT from SQLite DB when node:sqlite 
     rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('ConversationTitleResolver reads summary DB subagent links and avoids agentapi polling in main.mjs', async (t) => {
+  const mainSource = readFileSync(fileURLToPath(new URL('./main.mjs', import.meta.url)), 'utf-8');
+  assert.doesNotMatch(mainSource, /['"`]get-conversation-metadata['"`]/);
+  assert.equal(mainSource.includes('ANTIGRAVITY_AGENTAPI_EXE'), false);
+
+  // Verify optional fetchFallback uses long negative-cache TTL on empty results
+  let fallbackCalls = 0;
+  const fallbackResolver = new ConversationTitleResolver({
+    idPattern: /^[0-9a-f-]{8,}$/i,
+    fetchFallback: async () => {
+      fallbackCalls += 1;
+      return '';
+    },
+    cacheTtlMs: 1,
+    emptyCacheTtlMs: 60_000,
+  });
+  const missingConv = '88888888-8888-4888-8888-888888888888';
+  assert.equal(fallbackResolver.resolve(missingConv, []), '');
+  await new Promise((r) => setTimeout(r, 15));
+  assert.equal(fallbackResolver.resolve(missingConv, []), '');
+  assert.equal(fallbackCalls, 1);
+
+  let DatabaseSync;
+  try {
+    const req = createRequire(import.meta.url);
+    ({ DatabaseSync } = req('node:sqlite'));
+  } catch {
+    t.skip('node:sqlite unavailable on this Node.js version');
+    return;
+  }
+
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cm-summary-db-'));
+  try {
+    const appData = join(tmpRoot, 'antigravity');
+    mkdirSync(appData, { recursive: true });
+    const dbPath = join(appData, 'conversation_summaries.db');
+    const parentId = '99999999-9999-4999-8999-999999999991';
+    const childId = '99999999-9999-4999-8999-999999999992';
+
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE conversation_summaries (
+        conversation_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL DEFAULT '',
+        parent_conversation_id TEXT NOT NULL DEFAULT '',
+        nesting_depth INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    const ins = db.prepare(
+      'INSERT INTO conversation_summaries (conversation_id, title, parent_conversation_id, nesting_depth) VALUES (?, ?, ?, ?)',
+    );
+    ins.run(parentId, 'Main Feature Session', '', 0);
+    ins.run(childId, '', parentId, 1);
+    db.close();
+
+    const resolver = new ConversationTitleResolver({ idPattern: /^[0-9a-f-]{8,}$/i });
+    assert.equal(resolver.resolve(parentId, [appData]), 'Main Feature Session');
+    assert.equal(resolver.resolve(childId, [appData]), '');
+    assert.equal(resolver.isSubagent(parentId, [appData]), false);
+    assert.equal(resolver.isSubagent(childId, [appData]), true);
+    assert.equal(resolver.parentOf(childId, [appData]), parentId);
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
